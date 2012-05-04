@@ -248,6 +248,9 @@
                 camera.lookAt(scene.position);
 
                 updateComputerPosition(computerPaddle);
+                if(!lastMouseMove || lastTime - lastMouseMove > 5000){
+                    updateComputerPosition(playerPaddle);
+                }
 
                 calculateCollisions();
                 ball.position.addSelf(ballVelocity.clone().multiplyScalar(deltaTime / 1000));
@@ -261,7 +264,9 @@
                     ballPosition = ball.position,
                     computerVector = new THREE.Vector3(0,0,0);
 
-                if(ballVelocity.z > 0){
+                // if the ball vector is heading away from the paddle, ignore.
+                if((ballVelocity.z < 0 && computerPosition.z > 0) 
+                        || (ballVelocity.z > 0 && computerPosition.z < 0)){
                     return;
                 }
 
