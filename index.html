@@ -1,0 +1,327 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Three.js Pong</title>
+        <style>
+            body {
+                margin: 0;
+                cursor: hidden;
+            }
+            #container {
+                background-color: black;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+    <body onload="setup();">
+        <div id="container"></div>
+        <script src="https://raw.github.com/mrdoob/three.js/master/build/Three.js" type="text/javascript"></script>
+        <script>
+
+            if(!window.requestAnimationFrame){
+                if(window.mozRequestAnimationFrame){
+                    window.requestAnimationFrame = window.mozRequestAnimationFrame;
+                } else if(window.msRequestAnimationFrame){
+                    window.requestAnimationFrame = window.msRequestAnimationFrame;
+                } else if(window.webkitRequestAnimationFrame){
+                    window.requestAnimationFrame = window.webkitRequestAnimationFrame;
+                } else {
+                    window.requestAnimationFrame = function(fn){
+                        return setTimeout(fn, 10);
+                    }
+                }
+            }
+
+            var deltaTime,
+                lastTime,
+                elapsedTime,
+                startTime,
+                renderer,
+                scene,
+                camera,
+                floor,
+                ball,
+                playerPaddle,
+                computerPaddle,
+                border,
+                light,
+                mouseX,
+                mouseY,
+                ballVelocity = new THREE.Vector3(500, 0, 500),
+                originalBallVelocity = ballVelocity,
+                rotation;
+
+            var paddleWidth = 200,
+                paddleDepth = 10,
+                boardWidth = 600,
+                boardLength = 1400;
+
+            window.addEventListener('resize', function(){
+                if(!!renderer && !!camera){
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                }
+            });
+
+            var lastMouseX,
+                lastMouseY,
+                lastMouseMove;
+            window.addEventListener('mousemove', function(evt){
+                if(!!light){
+                    var x = evt.clientX - window.innerWidth / 2;
+                    var y = evt.clientY - window.innerHeight / 2;
+                    light.position.set(
+                        x/2,
+                        ( window.innerHeight - evt.clientY) / window.innerHeight * 200 + 600, 
+                        1000);
+                }
+
+                mouseX = evt.clientX;
+                mouseY = evt.clientY;
+
+                var mouseSpeed,
+                    mouseDirection,
+                    time = (new Date()).getTime();
+                if(!!playerPaddle){
+                    if(!!lastMouseMove){
+                        mouseDirection = mouseX < lastMouseX ? -1 : 1;
+                        if(!!rotation){
+                            var degrees = Math.floor(rotation * 180 / Math.PI) % 360;
+                            if(degrees > 90 && degrees < 270){
+                                mouseDirection = -mouseDirection;
+                            }
+                        }
+                        mouseSpeed = Math.sqrt(
+                                Math.pow(mouseX - lastMouseX, 2) + Math.pow(mouseX - lastMouseX, 2)
+                            ) / (time - lastMouseMove);
+                        if(mouseSpeed > 1000){
+                            mouseSpeed = 1000;
+                        }
+                        playerPaddle.position.x = playerPaddle.position.x + mouseDirection * mouseSpeed * 30;
+                        if(playerPaddle.position.x - paddleWidth / 2 < 0 - boardWidth/2){
+                            playerPaddle.position.x = (paddleWidth - boardWidth) / 2;
+                        }
+                        if(playerPaddle.position.x + paddleWidth / 2 > boardWidth/2){
+                            playerPaddle.position.x = (boardWidth - paddleWidth) / 2;
+                        }
+                    } else {
+                        playerPaddle.position.x = 0;
+                    }
+                }
+                lastMouseX = mouseX;
+                lastMouseY = mouseY;
+                lastMouseMove = (new Date()).getTime();
+            });
+
+            function setup(){
+                renderer = new THREE.WebGLRenderer();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.shadowMapEnabled = true;
+                renderer.shadowMapSoft = true;
+                document.getElementById('container').appendChild(renderer.domElement);
+
+                scene = new THREE.Scene();
+                scene.fog = new THREE.FogExp2( 0x000000, 0.00016 );
+
+                camera = new THREE.PerspectiveCamera(
+                        35,
+                        window.innerWidth / window.innerHeight,
+                        .1,
+                        10000
+                    );
+                camera.position.set( 0, 700, 1500);
+                camera.lookAt(scene.position);
+                camera.dynamic = true;
+                scene.add(camera);
+
+                // set up the ball
+                ball = new THREE.Mesh(
+                        new THREE.SphereGeometry(30, 30, 30),
+                        new THREE.MeshLambertMaterial({color: 0xff0000})
+                    );
+                ball.position.set(0,0,0);
+                ball.castShadow = true;
+                ball.receiveShadow = true;
+                ball.dynamic = true;
+                scene.add(ball);
+
+                // set up the player paddle
+                playerPaddle = new THREE.Mesh(
+                        new THREE.CubeGeometry(paddleWidth, 50, 10),
+                        new THREE.MeshLambertMaterial({color: 0x00ff00})
+                    );
+                playerPaddle.position.set(0, 0, 500);
+                playerPaddle.castShadow = true;
+                playerPaddle.receiveShadow = true;
+                scene.add(playerPaddle);
+
+                // Set up the computer paddle
+                computerPaddle = new THREE.Mesh(
+                        new THREE.CubeGeometry(paddleWidth, 50, 10),
+                        new THREE.MeshLambertMaterial({color: 0x0000ff})
+                    );
+                computerPaddle.position.set(0, 0, -500);
+                computerPaddle.castShadow = true;
+                computerPaddle.receiveShadow = true;
+                scene.add(computerPaddle);
+
+                // Set up the ribbon
+                var ribbonGeometry = new THREE.Geometry();
+                var positions = [[-300, -700 ],
+                                 [-300, 700],
+                                 [300, 700],
+                                 [300, -700],
+                                 [-300,-700]];
+                for(var i = 0, len = positions.length; i < len; i++){
+                    ribbonGeometry.vertices.push(new THREE.Vector3(
+                            positions[i][0],
+                            -25,
+                            positions[i][1]
+                        ));
+                    ribbonGeometry.vertices.push(new THREE.Vector3(
+                            positions[i][0],
+                            25,
+                            positions[i][1]
+                        ));
+                    ribbonGeometry.colors.push(new THREE.Color(0x666666));
+                    ribbonGeometry.colors.push(new THREE.Color(0xffffff));
+                }
+                ribbon = new THREE.Ribbon(
+                        ribbonGeometry,
+                        new THREE.MeshBasicMaterial({color: 0xffffff, vertexColors: true})
+                    );
+                ribbon.doubleSided = true;
+                ribbon.position.set(0,0,0);
+                    ribbon.matrix.scale( ribbon.scale );
+                    ribbon.boundRadiusScale = Math.max( ribbon.scale.x, Math.max( ribbon.scale.y, ribbon.scale.z ) );
+                ribbon.castShadow = true;
+                ribbon.receiveShadow = true;
+                scene.add(ribbon);
+
+                // set up the floor
+                floor = new THREE.Mesh(
+                        new THREE.PlaneGeometry(boardWidth, 1400, 10, 10),
+                        new THREE.MeshLambertMaterial({color: 0x666666})
+                    )
+                floor.position.set(0,-25,0);
+                floor.castShadow = false;
+                floor.receiveShadow = true;
+                scene.add(floor);
+
+                light = new THREE.DirectionalLight(0xffffff, 1.0);
+                light.position.set(1,1,2);
+                light.castShadow = true;
+                light.shadowDarkness = 0.5;
+                scene.add(light);
+
+                var ambient = new THREE.DirectionalLight(0xffffff, 1.0);
+                ambient.position.set(0,1,0);
+                ambient.castShadow = true;
+                ambient.shadowDarkness = 0.5;
+                scene.add(ambient);
+
+                start();
+            }
+
+            function start(){
+                startTime = (new Date()).getTime();
+                deltaTime = 0;
+                lastTime = (new Date()).getTime();
+
+                animate();
+            }
+
+            function animate(){
+                deltaTime = (new Date()).getTime() - lastTime;
+                lastTime = lastTime + 0 + deltaTime;
+                elapsedTime = lastTime - startTime;
+
+                rotation = elapsedTime / 20000 * 2 * Math.PI;
+
+                camera.position.x = 1500 * Math.sin(rotation);
+                camera.position.z = 1500 * Math.cos(rotation);
+                camera.lookAt(scene.position);
+
+                updateComputerPosition(computerPaddle);
+
+                calculateCollisions();
+                ball.position.addSelf(ballVelocity.clone().multiplyScalar(deltaTime / 1000));
+
+                render();
+                requestAnimationFrame(animate);
+            }
+
+            function updateComputerPosition(paddle){
+                var computerPosition = paddle.position,
+                    ballPosition = ball.position,
+                    computerVector = new THREE.Vector3(0,0,0);
+
+                if(ballVelocity.z > 0){
+                    return;
+                }
+
+                if(computerPosition.x < ball.position.x){
+                    computerVector.x = 1;
+                } else {
+                    computerVector.x = -1;
+                }
+
+                computerVector.multiplyScalar(500 * deltaTime / 1000);
+                paddle.position.addSelf(computerVector);
+
+                if(paddle.position.x - paddleWidth / 2 < -(boardWidth / 2)){
+                    paddle.position.x = (paddleWidth - boardWidth) / 2;
+                }
+                if (paddle.position.x + paddleWidth / 2 > boardWidth / 2) {
+                    paddle.position.x = (boardWidth - paddleWidth) / 2;
+                }
+            }
+
+            function calculateCollisions(){
+                var candidatePosition = (new THREE.Vector3()).add(ball.position, ballVelocity.clone().multiplyScalar(deltaTime / 1000));
+
+                if(candidatePosition.x < 25 - boardWidth / 2 || candidatePosition.x > boardWidth / 2 - 25){
+                    ballVelocity.x = -ballVelocity.x;
+                    ball.position.x = (ball.position.x < 0 ? 1 : -1) * (25 - boardWidth / 2);
+                }
+                if(candidatePosition.z < 25 - boardLength / 2 || candidatePosition.z > boardLength / 2 - 35){
+                    ballVelocity.z = -ballVelocity.z;
+                    ball.position.z = (ball.position.z < 0 ? 1 : -1) * (25 - boardLength / 2);
+
+                    ballVelocity = originalBallVelocity.clone();
+                    ball.position.set(0,0,0);
+                }
+
+                calculatePaddleCollision(candidatePosition, playerPaddle);
+                calculatePaddleCollision(candidatePosition, computerPaddle);
+            }
+
+            function calculatePaddleCollision(position, paddle){
+                var paddlePosition = paddle.position,
+                    halfPaddleWidth = paddleWidth / 2;
+
+                if(position.x > paddlePosition.x + halfPaddleWidth
+                        || position.x < paddlePosition.x - halfPaddleWidth){
+                    return;
+                }
+
+                if(position.z - 25 > paddlePosition.z
+                        || position.z + 25 < paddlePosition.z){
+                    return;
+                }
+
+                ballVelocity.z = ballVelocity.z * (ballVelocity.z > 1000 ? -1 : -1.1);
+            }
+
+            function render(){
+
+                renderer.render(scene, camera);
+            }
+        </script>
+    </body>
+</html>
